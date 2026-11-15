@@ -44,68 +44,87 @@ def find_locations():
         print(f" - ID: {location['id']} | Nama: {location.get('name')} | Parameter: {sensors}")
     return results
 
-def fetch_pm25_measurements(location_id, start_date="2025-10-10", end_date="2026-11-13"):
-    """Mengunduh rekaman pengukuran PM2.5 per jam dari sensor yang dipilih"""
-    print(f"\n[*] Mengambil data PM2.5 dari Location ID: {location_id}...")
-
-    # Menemukan sensor_id untuk PM2.5 di lokasi tersebut
-    location_url = f"https://api.openaq.org/v3/locations/{location_id}"
-    response = requests.get(location_url, headers=HEADERS)
-    if response.status_code != 200:
-        print(f"[!] Gagal membaca detail lokasi: HTTP {response.status_code}")
-        return None
-
-    sensors = response.json().get("results", [{}])[0].get("sensors", [])
-    pm25_sensor = next((sensor for sensor in sensors if sensor.get("parameter", {}).get("name") == "pm25"), None)
-
-    if not pm25_sensor:
-        print(f"[!] Lokasi {location_id} tidak memiliki sensor PM2.5")
-        return None
-
-    sensor_id = pm25_sensor["id"]
-    print(f"[✓] Sensor PM2.5 ditemukan (Sensor ID: {sensor_id}). Mengunduh measurements...")
-
-    # Ambil data agregasi per jam dari sensor
-    url = f"https://api.openaq.org/v3/sensors/{sensor_id}/hours"
-    params = {
-        "datetime_from": f"{start_date}T00:00:00Z",
-        "datetime_to": f"{end_date}T23:59:59Z",
-        "limit": 1000
-    }
-
-    response = requests.get(url, headers=HEADERS, params=params)
-
-    if response.status_code != 200:
-        print(f"[!] Gagal mengambil measurements: HTTP {response.status_code}")
-        print(response.text)
-        return None
-
-    data = response.json().get("results", [])
-    if not data:
-        print("[!] Tidak ada data pengukuran yang dikembalikan untuk rentang waktu ini.")
-        return None
-
-    records = []
-    for item in data:
-        # Parsing waktu & nilai
-        period = item.get("period", {})
-        dt = period.get("datetimeFrom", {}).get("local") or period.get("datetimeFrom", {}).get("utc")
-        value = item.get("value")
-        if dt and value is not None:
-            records.append({"timestamp": dt, "pm25": value})
-
-    df = pd.DataFrame(records)
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
-    df = df.sort_values("timestamp").reset_index(drop=True)
-
-    output_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'raw', 'air_quality')
-    os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, "pm25_medan_hourly.csv")
-
-    df.to_csv(output_path, index=False)
-    print(f"[✓] Berhasil menyimpan data PM2.5 ke: {os.path.abspath(output_path)}")
-    print(f"[✓] Total baris: {len(df)}")
-    print(f"\n[Preview 5 Baris Pertama]:\n{df.head()}")
+def fetch_pm25_measurements(location_id, start_date="2025-10-10", end_date="2026-11-15"):                                     
+    """Mengunduh seluruh rekaman pengukuran PM2.5 per jam menggunakan pagination"""                                           
+    print(f"\n[*] Mengambil data PM2.5 dari Location ID: {location_id}...")                                                   
+                                                                                                                                
+    # 1. Temukan sensor_id untuk PM2.5 di lokasi tersebut                                                                     
+    location_url = f"https://api.openaq.org/v3/locations/{location_id}"                                                       
+    response = requests.get(location_url, headers=HEADERS)                                                                    
+    if response.status_code != 200:                                                                                           
+        print(f"[!] Gagal membaca detail lokasi: HTTP {response.status_code}")                                                
+        return None                                                                                                           
+                                                                                                                                
+    sensors = response.json().get("results", [{}])[0].get("sensors", [])                                                      
+    pm25_sensor = next((sensor for sensor in sensors if sensor.get("parameter", {}).get("name") == "pm25"), None)             
+                                                                                                                                
+    if not pm25_sensor:                                                                                                       
+        print(f"[!] Lokasi {location_id} tidak memiliki sensor PM2.5")                                                        
+        return None                                                                                                           
+                                                                                                                                
+    sensor_id = pm25_sensor["id"]                                                                                             
+    print(f"[✓] Sensor PM2.5 ditemukan (Sensor ID: {sensor_id}). Mengunduh seluruh measurements via pagination...")           
+                                                                                                                                
+    # 2. Loop Pagination untuk mengambil semua halaman data                                                                   
+    records = []                                                                                                              
+    page = 1                                                                                                                  
+    url = f"https://api.openaq.org/v3/sensors/{sensor_id}/hours"                                                              
+                                                                                                                                
+    while True:                                                                                                               
+        params = {                                                                                                            
+            "datetime_from": f"{start_date}T00:00:00Z",                                                                       
+            "datetime_to": f"{end_date}T23:59:59Z",                                                                           
+            "limit": 1000,                                                                                                    
+            "page": page                                                                                                      
+        }                                                                                                                     
+                                                                                                                                
+        print(f"    -> Mengambil Halaman {page}...", end="", flush=True)                                                      
+        response = requests.get(url, headers=HEADERS, params=params)                                                          
+                                                                                                                                
+        if response.status_code != 200:                                                                                       
+            print(f" [!] Gagal HTTP {response.status_code}")                                                                  
+            break                                                                                                             
+                                                                                                                                
+        data = response.json().get("results", [])                                                                             
+        if not data:                                                                                                          
+            print(" [Tuntas: tidak ada data lagi]")                                                                           
+            break                                                                                                             
+                                                                                                                                
+        print(f" [Dapat {len(data)} baris]")                                                                                  
+                                                                                                                                
+        for item in data:                                                                                                     
+            period = item.get("period", {})                                                                                   
+            dt = period.get("datetimeFrom", {}).get("local") or period.get("datetimeFrom", {}).get("utc")                     
+            value = item.get("value")                                                                                         
+            if dt and value is not None:                                                                                      
+                records.append({"timestamp": dt, "pm25": value})                                                              
+                                                                                                                                
+        # Jika data yang dikembalikan kurang dari 1.000, berarti ini halaman terakhir                                         
+        if len(data) < 1000:                                                                                                  
+            print("    -> Semua halaman berhasil diunduh!")                                                                   
+            break                                                                                                             
+                                                                                                                                
+        page += 1                                                                                                             
+                                                                                                                                
+    if not records:                                                                                                           
+        print("[!] Tidak ada data pengukuran yang berhasil dikumpulkan.")                                                     
+        return None                                                                                                           
+                                                                                                                                
+    # 3. Konversi ke DataFrame & Bersihkan Duplikat                                                                           
+    df = pd.DataFrame(records)                                                                                                
+    df["timestamp"] = pd.to_datetime(df["timestamp"])                                                                         
+    df = df.drop_duplicates(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)                             
+                                                                                                                                
+    # 4. Simpan ke data/raw/air_quality/                                                                                      
+    output_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'raw', 'air_quality')                                  
+    os.makedirs(output_dir, exist_ok=True)                                                                                    
+    output_path = os.path.join(output_dir, "pm25_medan_hourly.csv")                                                           
+                                                                                                                                
+    df.to_csv(output_path, index=False)                                                                                       
+    print(f"\n[✓] Berhasil menyimpan seluruh data PM2.5 ke: {os.path.abspath(output_path)}")                                  
+    print(f"[✓] Total baris data terkumpul: {len(df):,} jam")                                                                 
+    print(f"[✓] Rentang data: {df['timestamp'].min()} s/d {df['timestamp'].max()}")                                           
+    print(f"\n[Preview 5 Baris Pertama]:\n{df.head()}")                                                                       
     return df
 
 def main():
