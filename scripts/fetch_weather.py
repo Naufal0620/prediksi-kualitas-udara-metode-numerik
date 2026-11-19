@@ -1,30 +1,28 @@
+"""
+Script Fetching Data Cuaca Historis Multi-Kota dari Open-Meteo Archive API
+Parameter: Suhu (2m), Kelembapan Relatif (2m), Presipitasi, Kecepatan Angin (10m), Arah Angin (10m)
+"""
+
 import os
 import requests
 import pandas as pd
-from dotenv import load_dotenv
+from config_cities import CITIES
 
-# 1. Memuat konfigurasi dari environtment
-dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
-load_dotenv(dotenv_path)
+def fetch_weather_for_city(city_key):
+    if city_key not in CITIES:
+        print(f"[!] Kota '{city_key}' tidak ditemukan di konfigurasi.")
+        return None
 
-LATITUDE = float(os.getenv('MEDAN_LAT', 3.5952))
-LONGITUDE = float(os.getenv('MEDAN_LON', 98.6722))
-TIMEZONE = os.getenv('TIMEZONE', 'Asia/Jakarta')
-
-# rentang waktu data historis 1 tahun (2024)
-START_DATE = "2025-10-01"
-END_DATE = "2026-11-15"
-
-def fetch_weather_data():
-    print(f"[*] Menghubungi Open-Meteo Archive API untuk Posisi ({LATITUDE}, {LONGITUDE})...")
-    print(f"[*] Rentang waktu: {START_DATE} s/d {END_DATE} (Timezone: {TIMEZONE})")
+    cfg = CITIES[city_key]
+    print(f"\n[*] Mengambil data cuaca Open-Meteo untuk {cfg['name']} ({cfg['latitude']}, {cfg['longitude']})...")
+    print(f"[*] Periode: {cfg['start_date']} s/d {cfg['end_date']}")
 
     url = "https://archive-api.open-meteo.com/v1/archive"
     params = {
-        "latitude": LATITUDE,
-        "longitude": LONGITUDE,
-        "start_date": START_DATE,
-        "end_date": END_DATE,
+        "latitude": cfg["latitude"],
+        "longitude": cfg["longitude"],
+        "start_date": cfg["start_date"],
+        "end_date": cfg["end_date"],
         "hourly": [
             "temperature_2m",
             "relative_humidity_2m",
@@ -32,41 +30,47 @@ def fetch_weather_data():
             "wind_speed_10m",
             "wind_direction_10m"
         ],
-        "timezone": TIMEZONE
+        "timezone": cfg.get("timezone", "Asia/Jakarta")
     }
 
-    response = requests.get(url, params=params, timeout=60)
+    try:
+        response = requests.get(url, params=params, timeout=60)
+        if response.status_code != 200:
+            print(f"[!] Gagal mengambil cuaca {cfg['name']}: HTTP {response.status_code}")
+            return None
 
-    if response.status_code != 200:
-        print(f"[!] Error saat mengambil data: HTTP {response.status_code}")
-        print(response.text)
-        return
+        data = response.json()
+        hourly = data.get("hourly", {})
+        if not hourly or "time" not in hourly:
+            print(f"[!] Data hourly cuaca kosong untuk {cfg['name']}.")
+            return None
 
-    data = response.json()
-    hourly = data.get("hourly", {})
+        df = pd.DataFrame({
+            "timestamp": hourly["time"],
+            "temperature_2m": hourly["temperature_2m"],
+            "relative_humidity_2m": hourly["relative_humidity_2m"],
+            "precipitation": hourly["precipitation"],
+            "wind_speed_10m": hourly["wind_speed_10m"],
+            "wind_direction_10m": hourly["wind_direction_10m"]
+        })
 
-    # 2. konversi data ke DataFrame Pandas
-    df = pd.DataFrame({
-        "timestamp": hourly["time"],
-        "temperature_2m": hourly["temperature_2m"],
-        "relative_humidity_2m": hourly["relative_humidity_2m"],
-        "precipitation": hourly["precipitation"],
-        "wind_speed_10m": hourly["wind_speed_10m"],
-        "wind_direction_10m": hourly["wind_direction_10m"],
-    })
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
 
-    # konversi kolom timestamp ke datetime
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
+        output_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'raw', 'weather')
+        os.makedirs(output_dir, exist_ok=True)
+        output_file = os.path.join(output_dir, f"weather_{city_key}_hourly.csv")
 
-    # 3. simpan ke folder raw/weather
-    output_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'raw', 'weather')
-    os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, "weather_medan_hourly.csv")
+        df.to_csv(output_file, index=False)
+        print(f"[✓] Cuaca {cfg['name']} berhasil disimpan ({len(df):,} baris) -> {os.path.basename(output_file)}")
+        return df
 
-    df.to_csv(output_path, index=False)
-    print(f"[✓] Berhasil menyimpan data cuaca ke: {os.path.abspath(output_path)}")
-    print(f"[✓] Total baris data: {len(df)} jam (~{len(df)//24} hari)")
-    print(f"\n[Preview 5 Baris Pertama]:\n{df.head()}")
+    except Exception as e:
+        print(f"[!] Error koneksi Open-Meteo untuk {cfg['name']}: {e}")
+        return None
+
+def main():
+    for city_key in CITIES.keys():
+        fetch_weather_for_city(city_key)
 
 if __name__ == "__main__":
-    fetch_weather_data()
+    main()
