@@ -17,11 +17,18 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import joblib
 
-# Tambahkan direktori scripts dan server ke sys.path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'scripts'))
-sys.path.append(os.path.dirname(__file__))
-from config_cities import CITIES
-from numerical_engine import compute_ma24, polynomial_curve_fitting, secant_root_finding
+# Impor konfigurasi kota dan mesin numerik (dengan fallback impor modular)
+try:
+    from config_cities import CITIES
+except ImportError:
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'scripts')))
+    sys.path.append(os.path.abspath(os.path.dirname(__file__)))
+    from config_cities import CITIES
+
+try:
+    from numerical_engine import compute_ma24, polynomial_curve_fitting, secant_root_finding
+except ImportError:
+    from server.numerical_engine import compute_ma24, polynomial_curve_fitting, secant_root_finding
 
 app = Flask(__name__)
 CORS(app)  # Memungkinkan diakses oleh frontend mana pun (React, Vue, Vite, atau HTML statis)
