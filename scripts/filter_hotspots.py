@@ -1,39 +1,62 @@
+"""
+Script Filter Titik Api NASA FIRMS Berdasarkan Radius Stasiun Kota-Kota Besar
+Menggunakan formula Haversine untuk geofencing per kota
+"""
+
 import os
 import pandas as pd
+import numpy as np
+from config_cities import CITIES
 
-# Path file mentah dan output
-input_file = os.path.join(os.path.dirname(__file__), '..', 'data', 'raw', 'hotspots', 'viirs-jpss1_2025_Indonesia.csv')
-output_file = os.path.join(os.path.dirname(__file__), '..', 'data', 'raw', 'hotspots', 'hotspots_medan_sumut_2025.csv')
+def haversine_distance(lat1, lon1, lat2, lon2):
+    """Menghitung jarak geosfer (km) antara titik stasiun dan titik api"""
+    r = 6371.0  # radius bumi km
+    phi1, phi2 = np.radians(lat1), np.radians(lat2)
+    delta_phi = np.radians(lat2 - lat1)
+    delta_lambda = np.radians(lon2 - lon1)
 
-print(f"[*] Membaca dataset NASA FIRMS Indonesia: {input_file}...")
-df = pd.read_csv(input_file)
-print(f"[*] Total titik api seluruh Indonesia: {len(df):,} baris")
+    a = np.sin(delta_phi / 2.0)**2 + np.cos(phi1) * np.cos(phi2) * np.sin(delta_lambda / 2.0)**2
+    c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+    return r * c
 
-# 1. Filter Bounding Box Sumatera Utara / Sekitar Medan
-# Min Lon: 97.0, Max Lon: 100.0 | Min Lat: 2.0, Max Lat: 4.5
-lat_min, lat_max = 2.0, 4.5
-lon_min, lon_max = 97.0, 100.0
+def filter_hotspots_for_cities():
+    base_dir = os.path.dirname(__file__)
+    master_firms = os.path.join(base_dir, '..', 'data', 'raw', 'hotspots', 'viirs-jpss1_2025_Indonesia.csv')
 
-df_filtered = df[
-    (df['latitude'] >= lat_min) & (df['latitude'] <= lat_max) &
-    (df['longitude'] >= lon_min) & (df['longitude'] <= lon_max)
-].copy()
+    if not os.path.exists(master_firms):
+        print(f"[!] File master FIRMS tidak ditemukan: {master_firms}")
+        return
 
-print(f"[✓] Berhasil memfilter area Sumut: {len(df_filtered):,} titik api ditemukan!")
+    print(f"[*] Membaca berkas master titik api VIIRS Indonesia (94.000+ baris)...")
+    df_raw = pd.read_csv(master_firms)
 
-# 2. Standarisasi Timestamp (UTC -> WIB / UTC+7)
-df_filtered['acq_time_str'] = df_filtered['acq_time'].astype(str).str.zfill(4)
-df_filtered['datetime_utc'] = pd.to_datetime(
-    df_filtered['acq_date'] + ' ' + df_filtered['acq_time_str'],
-    format='%Y-%m-%d %H%M'
-)
-df_filtered['timestamp'] = df_filtered['datetime_utc'] + pd.Timedelta(hours=7)
+    # 1. Standarisasi Timestamp UTC -> WIB (UTC+7)
+    print("[*] Melakukan parsing waktu satelit ke WIB (UTC+7)...")
+    df_raw['acq_time_str'] = df_raw['acq_time'].astype(str).str.zfill(4)
+    df_raw['datetime_utc'] = pd.to_datetime(
+        df_raw['acq_date'] + ' ' + df_raw['acq_time_str'],
+        format='%Y-%m-%d %H%M'
+    )
+    df_raw['timestamp'] = df_raw['datetime_utc'] + pd.Timedelta(hours=7)
 
-# 3. Pilih kolom penting saja
-kolom_dipakai = ['timestamp', 'latitude', 'longitude', 'bright_ti4', 'confidence', 'frp']
-df_clean = df_filtered[kolom_dipakai].sort_values('timestamp').reset_index(drop=True)
+    output_dir = os.path.join(base_dir, '..', 'data', 'raw', 'hotspots')
+    os.makedirs(output_dir, exist_ok=True)
 
-# 4. Simpan hasil filter
-df_clean.to_csv(output_file, index=False)
-print(f"[✓] File bersih berhasil disimpan ke: {os.path.abspath(output_file)}")
-print(f"\n[Preview 5 Data Titik Api Pertama di Sumut]:\n{df_clean.head()}")
+    # 2. Filter per kota berdasarkan radius
+    for city_key, cfg in CITIES.items():
+        lat_c, lon_c = cfg["latitude"], cfg["longitude"]
+        radius = cfg["hotspot_radius_km"]
+
+        print(f"\n[*] Memfilter hotspot untuk {cfg['name']} (Radius {radius} km)...")
+        dist = haversine_distance(lat_c, lon_c, df_raw['latitude'], df_raw['longitude'])
+        df_city = df_raw[dist <= radius].copy()
+
+        cols = ['timestamp', 'latitude', 'longitude', 'bright_ti4', 'confidence', 'frp']
+        df_city = df_city[cols].sort_values('timestamp').reset_index(drop=True)
+
+        out_path = os.path.join(output_dir, f"hotspots_{city_key}_2025.csv")
+        df_city.to_csv(out_path, index=False)
+        print(f"[✓] {len(df_city):,} titik api ditemukan dalam radius {radius} km dari {cfg['name']} -> {os.path.basename(out_path)}")
+
+if __name__ == "__main__":
+    filter_hotspots_for_cities()
