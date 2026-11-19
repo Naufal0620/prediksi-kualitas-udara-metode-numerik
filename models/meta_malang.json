@@ -1,0 +1,29 @@
+{
+  "city_key": "malang",
+  "station_name": "Malang",
+  "coordinates": {
+    "latitude": -7.9185,
+    "longitude": 112.6513
+  },
+  "features": [
+    "pm25_lag1",
+    "pm25_lag2",
+    "pm25_lag24",
+    "hour",
+    "day_of_week",
+    "temperature_2m",
+    "relative_humidity_2m",
+    "precipitation",
+    "wind_speed_10m",
+    "wind_direction_10m",
+    "hotspot_count"
+  ],
+  "metrics": {
+    "mae": 6.34,
+    "rmse": 10.04
+  },
+  "total_samples": 8246,
+  "train_samples": 6596,
+  "test_samples": 1650,
+  "trained_at": "2026-11-19T22:09:38.858765"
+}

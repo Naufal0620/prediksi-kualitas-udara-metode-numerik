@@ -1,0 +1,29 @@
+{
+  "city_key": "depok",
+  "station_name": "Depok",
+  "coordinates": {
+    "latitude": -6.4095,
+    "longitude": 106.8562
+  },
+  "features": [
+    "pm25_lag1",
+    "pm25_lag2",
+    "pm25_lag24",
+    "hour",
+    "day_of_week",
+    "temperature_2m",
+    "relative_humidity_2m",
+    "precipitation",
+    "wind_speed_10m",
+    "wind_direction_10m",
+    "hotspot_count"
+  ],
+  "metrics": {
+    "mae": 7.16,
+    "rmse": 9.7
+  },
+  "total_samples": 7585,
+  "train_samples": 6068,
+  "test_samples": 1517,
+  "trained_at": "2026-11-19T22:09:38.396739"
+}
