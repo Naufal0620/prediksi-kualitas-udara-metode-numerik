@@ -12,8 +12,8 @@ LONGITUDE = float(os.getenv('MEDAN_LON', 98.6722))
 TIMEZONE = os.getenv('TIMEZONE', 'Asia/Jakarta')
 
 # rentang waktu data historis 1 tahun (2024)
-START_DATE = "2024-01-01"
-END_DATE = "2024-12-31"
+START_DATE = "2025-10-01"
+END_DATE = "2026-11-15"
 
 def fetch_weather_data():
     print(f"[*] Menghubungi Open-Meteo Archive API untuk Posisi ({LATITUDE}, {LONGITUDE})...")
