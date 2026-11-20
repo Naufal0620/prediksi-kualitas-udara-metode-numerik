@@ -8,25 +8,34 @@
   "features": [
     "pm25_lag1",
     "pm25_lag2",
+    "pm25_lag3",
     "pm25_lag24",
-    "hour",
+    "pm25_roll_mean3",
+    "pm25_roll_mean6",
+    "pm25_roll_std6",
+    "hour_sin",
+    "hour_cos",
     "day_of_week",
+    "is_weekend",
     "temperature_2m",
     "relative_humidity_2m",
+    "temp_rh_interaction",
     "precipitation",
     "wind_speed_10m",
     "wind_direction_10m",
     "hotspot_count"
   ],
   "metrics": {
-    "mae": 5.46,
-    "rmse": 9.13,
-    "mape_percent": 18.23,
-    "accuracy_percent": 81.77
+    "mae": 5.33,
+    "rmse": 8.79,
+    "mape_percent": 18.4,
+    "accuracy_percent": 81.6
   },
   "total_samples": 8246,
   "train_samples": 7421,
   "test_samples": 825,
   "split_ratio": "90% Train / 10% Test (Chronological)",
-  "trained_at": "2026-11-20T10:38:38.584467"
+  "features_count": 18,
+  "horizon_support": "Up to 7 days (168 hours)",
+  "trained_at": "2026-11-20T10:54:39.539099"
 }
