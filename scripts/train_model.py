@@ -1,8 +1,13 @@
 """
 Script Pelatihan Model Machine Learning: Random Forest Regressor Multi-Stasiun
-Menerapkan Chronological Split (80:20) sesuai batasan proposal Bab 1.4 butir 11
-Evaluasi: Mean Absolute Error (MAE) & Root Mean Square Error (RMSE)
-Ekspor: models/rf_model_<city>.joblib
+Menerapkan Chronological Split: 90% Data Latih & 10% Data Uji
+Evaluasi Metrik:
+  - MAE  (Mean Absolute Error dalam µg/m³)
+  - RMSE (Root Mean Squared Error dalam µg/m³)
+  - MAPE (Mean Absolute Percentage Error dalam %)
+  - Accuracy Percentage (100% - MAPE)
+Ekspor: models/rf_model_<city>.joblib dan models/meta_<city>.json
+Laporan: Development/MODEL_EVALUATION.md
 """
 
 import os
@@ -64,14 +69,14 @@ def train_city_model(city_key):
     df = pd.read_csv(data_path)
     X, y, timestamps, feature_cols = build_features(df)
 
-    # Chronological Split (80% Train, 20% Test)
-    split_idx = int(len(X) * 0.8)
+    # Chronological Split (90% Train, 10% Test)
+    split_idx = int(len(X) * 0.9)
     X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
     y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
 
     print(f"[*] Total Baris Fitur : {len(X):,} jam")
-    print(f"[*] Data Latih (80%)  : {len(X_train):,} jam (Kronologis Awal)")
-    print(f"[*] Data Uji   (20%)  : {len(X_test):,} jam (Kronologis Akhir)")
+    print(f"[*] Data Latih (90%)  : {len(X_train):,} jam (Kronologis Awal)")
+    print(f"[*] Data Uji   (10%)  : {len(X_test):,} jam (Kronologis Akhir)")
 
     # Konfigurasi Random Forest Regressor
     model = RandomForestRegressor(
@@ -84,14 +89,28 @@ def train_city_model(city_key):
 
     model.fit(X_train, y_train)
 
-    # Prediksi & Evaluasi Data Uji
+    # Prediksi Data Uji
     y_pred = model.predict(X_test)
+
+    # Evaluasi Metrik Absolut
     mae = mean_absolute_error(y_test, y_pred)
     rmse = root_mean_squared_error(y_test, y_pred)
 
-    print(f"\n[HASIL EVALUASI METRIK PENGUJIAN]:")
-    print(f"  • MAE  (Mean Absolute Error)     : {mae:.2f} µg/m³")
+    # Evaluasi Persentase Error (MAPE & Akurasi)
+    # Hindari pembagian dengan nol dengan memfilter data PM2.5 > 0.5 µg/m³
+    valid_mask = y_test > 0.5
+    if np.sum(valid_mask) > 0:
+        mape = float(np.mean(np.abs((y_test[valid_mask] - y_pred[valid_mask]) / y_test[valid_mask])) * 100.0)
+    else:
+        mape = float(np.mean(np.abs(y_test - y_pred) / (y_test + 1.0)) * 100.0)
+
+    accuracy_pct = max(0.0, 100.0 - mape)
+
+    print(f"\n[HASIL EVALUASI ERROR DATA UJI (10% KRONOLOGIS AKHIR)]:")
+    print(f"  • MAE (Mean Absolute Error)      : {mae:.2f} µg/m³")
     print(f"  • RMSE (Root Mean Squared Error) : {rmse:.2f} µg/m³")
+    print(f"  • MAPE (Persentase Error Rerata) : {mape:.2f}%")
+    print(f"  • Akurasi Prediksi Model         : {accuracy_pct:.2f}%")
 
     # Simpan Model & Metadata Fitur
     models_dir = os.path.join(base_dir, '..', 'models')
@@ -110,10 +129,16 @@ def train_city_model(city_key):
         "station_name": cfg["name"],
         "coordinates": {"latitude": cfg["latitude"], "longitude": cfg["longitude"]},
         "features": feature_cols,
-        "metrics": {"mae": round(mae, 2), "rmse": round(rmse, 2)},
+        "metrics": {
+            "mae": round(mae, 2),
+            "rmse": round(rmse, 2),
+            "mape_percent": round(mape, 2),
+            "accuracy_percent": round(accuracy_pct, 2)
+        },
         "total_samples": len(X),
         "train_samples": len(X_train),
         "test_samples": len(X_test),
+        "split_ratio": "90% Train / 10% Test (Chronological)",
         "trained_at": pd.Timestamp.now().isoformat()
     }
 
@@ -130,18 +155,26 @@ def main():
         if meta:
             results.append(meta)
 
-    # Rekap ke Development
+    # Rekap ke Development/MODEL_EVALUATION.md
     rekap_path = os.path.join(os.path.dirname(__file__), '..', 'Development', 'MODEL_EVALUATION.md')
     with open(rekap_path, 'w', encoding='utf-8') as f:
-        f.write("# Laporan Hasil Evaluasi Pelatihan Model Random Forest\n\n")
-        f.write("Evaluasi menggunakan metode **Chronological Split (80% Train, 20% Test)** sesuai batasan proposal Bab 1.4 butir 11.\n\n")
-        f.write("| No | Wilayah & Stasiun | Total Data | MAE (µg/m³) | RMSE (µg/m³) | Model File |\n")
-        f.write("|:---:|:---|:---:|:---:|:---:|:---|\n")
+        f.write("# 📊 Laporan Hasil Evaluasi Pelatihan Model Random Forest\n\n")
+        f.write("Evaluasi menggunakan metode **Chronological Split (90% Data Latih, 10% Data Uji)** sesuai urutan waktu deret historis.\n\n")
+        f.write("### 📌 Definisi Metrik:\n")
+        f.write("- **MAE (*Mean Absolute Error*)**: Rata-rata selisih absolut antara nilai prediksi dan aktual fisik (dalam satuan $\\mu g/m^3$).\n")
+        f.write("- **RMSE (*Root Mean Squared Error*)**: Akar rata-rata kuadrat error, memberi penalti lebih besar pada lonjakan polusi ekstrem (dalam $\\mu g/m^3$).\n")
+        f.write("- **MAPE (*Mean Absolute Percentage Error*)**: **Persentase error rata-rata model** relatif terhadap konsentrasi aktual (%). Semakin kecil nilainya, semakin akurat.\n")
+        f.write("- **Akurasi (%)**: Tingkat akurasi prediksi model ($100\\% - \\text{MAPE}$).\n\n")
+        f.write("### 📈 Tabel Evaluasi Seluruh Stasiun:\n\n")
+        f.write("| No | Wilayah & Stasiun | Total Data | Latih (90%) | Uji (10%) | MAE (µg/m³) | RMSE (µg/m³) | **Persentase Error (MAPE)** | **Akurasi Prediksi** |\n")
+        f.write("|:---:|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|\n")
         for idx, res in enumerate(results, 1):
-            f.write(f"| {idx} | **{res['station_name']}** | {res['total_samples']:,} | **{res['metrics']['mae']}** | **{res['metrics']['rmse']}** | `rf_model_{res['city_key']}.joblib` |\n")
-        f.write("\n> *Catatan: Nilai MAE dan RMSE yang rendah menunjukkan model mampu menangkap fluktuasi polusi dengan presisi tinggi.*\n")
+            m = res['metrics']
+            f.write(f"| {idx} | **{res['station_name']}** | {res['total_samples']:,} | {res['train_samples']:,} | {res['test_samples']:,} | {m['mae']} | {m['rmse']} | **{m['mape_percent']}%** | **{m['accuracy_percent']}%** |\n")
+        f.write("\n> *Catatan: Model dilatih pada data historis awal dan diuji murni pada data masa depan (10% kronologis akhir) tanpa data leakage.*\n")
 
-    print(f"\n[✓✓✓] Seluruh model berhasil dilatih! Rekap metrik tersimpan di Development/MODEL_EVALUATION.md")
+    print(f"\n[✓✓✓] Seluruh model berhasil dilatih dengan rasio 90:10!")
+    print(f"[✓] Laporan lengkap tersimpan di: {os.path.abspath(rekap_path)}")
 
 if __name__ == "__main__":
     main()

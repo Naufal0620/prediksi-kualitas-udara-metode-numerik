@@ -19,11 +19,14 @@
     "hotspot_count"
   ],
   "metrics": {
-    "mae": 7.16,
-    "rmse": 9.7
+    "mae": 7.02,
+    "rmse": 9.7,
+    "mape_percent": 36.31,
+    "accuracy_percent": 63.69
   },
   "total_samples": 7585,
-  "train_samples": 6068,
-  "test_samples": 1517,
-  "trained_at": "2026-11-19T22:09:38.396739"
+  "train_samples": 6826,
+  "test_samples": 759,
+  "split_ratio": "90% Train / 10% Test (Chronological)",
+  "trained_at": "2026-11-20T10:38:36.972598"
 }
