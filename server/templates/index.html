@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web GIS PM2.5 Indonesia - Live API & Demo Tester</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        #map { height: 480px; width: 100%; border-radius: 0.75rem; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+    <!-- Navbar -->
+    <header class="border-b border-slate-800 bg-slate-950/80 backdrop-blur sticky top-0 z-50 px-6 py-4">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <span class="text-2xl">🌍</span>
+                <div>
+                    <h1 class="font-bold text-lg text-teal-400">Web GIS PM2.5 Indonesia (Tester & Preview)</h1>
+                    <p class="text-xs text-slate-400">Random Forest + Polinomial Curve Fitting + Metode Secant (PP 22/2021)</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    ● REST API Online
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto p-6 space-y-6">
+        <!-- Control Bar -->
+        <div class="bg-slate-800/80 p-4 rounded-xl border border-slate-700 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center space-x-4">
+                <label class="text-sm font-semibold text-slate-300">Pilih Stasiun:</label>
+                <select id="stationSelect" class="bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 outline-none">
+                    <option value="medan">Medan (USU) - Sumatera Utara</option>
+                    <option value="jakarta">Jakarta (Central) - DKI Jakarta</option>
+                    <option value="palembang">Palembang - Sumatera Selatan</option>
+                    <option value="depok">Depok - Jawa Barat</option>
+                    <option value="malang">Malang - Jawa Timur</option>
+                    <option value="bali_ubud">Bali (Ubud) - Gianyar</option>
+                </select>
+            </div>
+            <div class="flex items-center space-x-3">
+                <label class="text-sm font-semibold text-slate-300">Jangka Waktu Peramalan:</label>
+                <div class="inline-flex rounded-lg border border-slate-700 bg-slate-900 p-1">
+                    <button id="btn1d" onclick="setHorizon(1)" class="px-3 py-1 text-xs font-medium rounded-md bg-teal-600 text-white">24 Jam</button>
+                    <button id="btn3d" onclick="setHorizon(3)" class="px-3 py-1 text-xs font-medium rounded-md text-slate-400 hover:text-white">3 Hari</button>
+                    <button id="btn7d" onclick="setHorizon(7)" class="px-3 py-1 text-xs font-medium rounded-md text-slate-400 hover:text-white">7 Hari (Seminggu)</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Grid: Peta & Detail Early Warning -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Peta Leaflet (2 Kolom) -->
+            <div class="lg:col-span-2 bg-slate-800/80 p-4 rounded-xl border border-slate-700 space-y-3">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300">Peta Sebaran Stasiun & Titik Api NASA FIRMS</h2>
+                    <span id="mapNotice" class="text-xs text-slate-400">Klik marker stasiun di peta untuk memuat prediksi</span>
+                </div>
+                <div id="map"></div>
+            </div>
+
+            <!-- Panel Analitik & Secant Result (1 Kolom) -->
+            <div class="bg-slate-800/80 p-5 rounded-xl border border-slate-700 flex flex-col justify-between space-y-4">
+                <div>
+                    <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3">Early Warning & Analisis Numerik</h2>
+                    
+                    <!-- Alert Status Card -->
+                    <div id="secantCard" class="p-4 rounded-xl border mb-4 bg-slate-900 border-slate-700">
+                        <div class="flex items-center space-x-2">
+                            <span id="secantIcon" class="text-2xl">⏳</span>
+                            <div>
+                                <h3 id="secantStatus" class="font-bold text-sm text-slate-200">Memuat analisis...</h3>
+                                <p id="secantDesc" class="text-xs text-slate-400 mt-1">Mengambil data inferensi dari server API...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Statistik Model -->
+                    <div class="space-y-2.5 text-xs">
+                        <div class="flex justify-between py-1.5 border-b border-slate-700">
+                            <span class="text-slate-400">Baku Mutu PP No. 22/2021:</span>
+                            <span class="font-semibold text-rose-400">55.0 µg/m³ (24-Hour MA)</span>
+                        </div>
+                        <div class="flex justify-between py-1.5 border-b border-slate-700">
+                            <span class="text-slate-400">Akurasi Model Training:</span>
+                            <span id="statAcc" class="font-semibold text-teal-400">-</span>
+                        </div>
+                        <div class="flex justify-between py-1.5 border-b border-slate-700">
+                            <span class="text-slate-400">MAE / RMSE Pengujian:</span>
+                            <span id="statErr" class="font-semibold text-slate-300">-</span>
+                        </div>
+                        <div class="flex justify-between py-1.5 border-b border-slate-700">
+                            <span class="text-slate-400">Iterasi Metode Secant:</span>
+                            <span id="statIter" class="font-semibold text-amber-400">-</span>
+                        </div>
+                        <div class="flex justify-between py-1.5">
+                            <span class="text-slate-400">Horizon Peramalan:</span>
+                            <span id="statHorizon" class="font-semibold text-cyan-400">24 Jam</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-3 bg-slate-900/80 rounded-lg border border-slate-800 text-[11px] text-slate-400">
+                    💡 <b>Catatan untuk Rekan Frontend:</b> Kode UI ini adalah live demo tester. Seluruh visualisasi grafik dan data ditenagai oleh <code>/api/predict/&lt;city&gt;</code>.
+                </div>
+            </div>
+        </div>
+
+        <!-- Grafik Chart.js Section -->
+        <div class="bg-slate-800/80 p-5 rounded-xl border border-slate-700 space-y-3">
+            <div class="flex flex-wrap justify-between items-center gap-2">
+                <div>
+                    <h2 class="text-base font-bold text-slate-200">Grafik Deret Waktu Prediksi & Kurva Kontinu Polinomial</h2>
+                    <p class="text-xs text-slate-400">Perbandingan Titik Diskrit Random Forest, Kurva Kontinu MA24, dan Ambang Batas Bahaya Nasional</p>
+                </div>
+                <div class="flex items-center space-x-3 text-xs">
+                    <span class="flex items-center space-x-1"><span class="w-3 h-3 rounded-full bg-teal-400 inline-block"></span><span class="text-slate-300">Prediksi Diskrit</span></span>
+                    <span class="flex items-center space-x-1"><span class="w-3 h-3 rounded-full bg-cyan-400 inline-block"></span><span class="text-slate-300">Kurva Polinomial MA24</span></span>
+                    <span class="flex items-center space-x-1"><span class="w-3 h-0.5 bg-rose-500 inline-block"></span><span class="text-slate-300">Baku Mutu (55 µg/m³)</span></span>
+                </div>
+            </div>
+            <div class="h-80 w-full">
+                <canvas id="predictionChart"></canvas>
+            </div>
+        </div>
+    </main>
+
+    <!-- Script Integrasi Client-Side -->
+    <script>
+        let currentDays = 1;
+        let map, chart;
+        let stationMarkers = {};
+
+        // Inisialisasi Peta Leaflet
+        function initMap() {
+            map = L.map('map').setView([-2.5, 118.0], 5);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+                maxZoom: 18
+            }).addTo(map);
+
+            // Fetch Katalog Stasiun
+            fetch('/api/stations')
+                .then(r => r.json())
+                .then(data => {
+                    data.stations.forEach(st => {
+                        const marker = L.circleMarker([st.coordinates.latitude, st.coordinates.longitude], {
+                            radius: 9,
+                            fillColor: '#0D9488',
+                            color: '#FFFFFF',
+                            weight: 2,
+                            opacity: 1,
+                            fillOpacity: 0.85
+                        }).addTo(map);
+
+                        marker.bindPopup(`<b>${st.name}</b><br>${st.city}, ${st.province}<br>Akurasi: ${st.metrics.accuracy_percent || '-'}%`);
+                        marker.on('click', () => {
+                            document.getElementById('stationSelect').value = st.key;
+                            loadStationData(st.key);
+                        });
+                        stationMarkers[st.key] = marker;
+                    });
+                });
+        }
+
+        // Inisialisasi Chart.js
+        function initChart() {
+            const ctx = document.getElementById('predictionChart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Prediksi Diskrit (µg/m³)',
+                            data: [],
+                            borderColor: '#2DD4BF',
+                            backgroundColor: 'rgba(45, 212, 191, 0.15)',
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            tension: 0.1
+                        },
+                        {
+                            label: 'Kurva Kontinu MA24 (Polinomial)',
+                            data: [],
+                            borderColor: '#38BDF8',
+                            borderWidth: 2.5,
+                            pointRadius: 0,
+                            fill: false,
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Baku Mutu Nasional (55 µg/m³)',
+                            data: [],
+                            borderColor: '#EF4444',
+                            borderWidth: 2,
+                            borderDash: [6, 4],
+                            pointRadius: 0,
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94A3B8', maxTicksLimit: 12 } },
+                        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94A3B8' }, beginAtZero: true }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        // Panggil API Prediksi & Perbarui Tampilan
+        function loadStationData(cityKey) {
+            fetch(`/api/predict/${cityKey}?days=${currentDays}`)
+                .then(r => r.json())
+                .then(res => {
+                    // 1. Update Chart
+                    chart.data.labels = res.forecast_hours.map(h => h.slice(5));
+                    chart.data.datasets[0].data = res.raw_predictions;
+                    chart.data.datasets[1].data = res.ma24_discrete;
+                    chart.data.datasets[2].data = new Array(res.raw_predictions.length).fill(res.air_quality_threshold);
+                    chart.update();
+
+                    // 2. Update Early Warning Card
+                    const sec = res.secant_analysis;
+                    const card = document.getElementById('secantCard');
+                    const icon = document.getElementById('secantIcon');
+                    const title = document.getElementById('secantStatus');
+                    const desc = document.getElementById('secantDesc');
+
+                    if (sec.status === 'SAFE') {
+                        card.className = "p-4 rounded-xl border border-emerald-500/30 bg-emerald-950/20";
+                        icon.innerText = "✅";
+                        title.className = "font-bold text-sm text-emerald-400";
+                        title.innerText = "KUALITAS UDARA AMAN";
+                    } else {
+                        card.className = "p-4 rounded-xl border border-rose-500/30 bg-rose-950/20";
+                        icon.innerText = "⚠️";
+                        title.className = "font-bold text-sm text-rose-400";
+                        title.innerText = "PERINGATAN DINI: BAHAYA";
+                    }
+                    desc.innerText = sec.message;
+
+                    // 3. Update Stat Bar
+                    document.getElementById('statIter').innerText = `${sec.iterations} iterasi (Residu: ${sec.residual || 0})`;
+                    document.getElementById('statHorizon').innerText = `${res.forecast_horizon.days} Hari (${res.forecast_horizon.hours} Jam)`;
+
+                    // Fokuskan peta ke stasiun terpilih
+                    map.setView([res.station.coordinates.latitude, res.station.coordinates.longitude], 9);
+                });
+
+            // Ambil metrik stasiun
+            fetch('/api/stations')
+                .then(r => r.json())
+                .then(d => {
+                    const st = d.stations.find(s => s.key === cityKey);
+                    if (st && st.metrics) {
+                        document.getElementById('statAcc').innerText = `${st.metrics.accuracy_percent || '-'}% (MAPE: ${st.metrics.mape_percent || '-'}%)`;
+                        document.getElementById('statErr').innerText = `${st.metrics.mae || '-'} / ${st.metrics.rmse || '-'} µg/m³`;
+                    }
+                });
+        }
+
+        function setHorizon(days) {
+            currentDays = days;
+            ['btn1d', 'btn3d', 'btn7d'].forEach(id => {
+                document.getElementById(id).className = "px-3 py-1 text-xs font-medium rounded-md text-slate-400 hover:text-white";
+            });
+            document.getElementById(`btn${days}d`).className = "px-3 py-1 text-xs font-medium rounded-md bg-teal-600 text-white";
+            loadStationData(document.getElementById('stationSelect').value);
+        }
+
+        document.getElementById('stationSelect').addEventListener('change', (e) => {
+            loadStationData(e.target.value);
+        });
+
+        // Inisialisasi saat web dimuat
+        window.onload = () => {
+            initMap();
+            initChart();
+            loadStationData('medan');
+        };
+    </script>
+</body>
+</html>

@@ -17,7 +17,7 @@ import json
 import requests
 import numpy as np
 import pandas as pd
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
 import joblib
 
@@ -50,6 +50,10 @@ def get_model(city_key):
         if os.path.exists(model_path):
             LOADED_MODELS[city_key] = joblib.load(model_path)
     return LOADED_MODELS.get(city_key)
+
+@app.route('/', methods=['GET'])
+def index():
+    return render_template('index.html')
 
 @app.route('/api/health', methods=['GET'])
 def health():
